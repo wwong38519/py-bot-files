@@ -45,6 +45,8 @@ def upload_file_cb(bot, job):
 
 def list_file(bot, update, user_data):
     logger.info(update)
+    chat_id = update.message.chat.id
+    bot.sendChatAction(chat_id=chat_id, action=ChatAction.TYPING)
     filenames = os.listdir(config.savePath)
     user_data['list'] = filenames
     if len(filenames) > config.pageLimit:
@@ -52,7 +54,7 @@ def list_file(bot, update, user_data):
         buttonNext = InlineKeyboardButton('Next', callback_data=str(start+config.pageLimit))
         reply_markup = InlineKeyboardMarkup([[buttonNext]])
         message = format(filenames[start:start+config.pageLimit])
-        bot.sendMessage(chat_id=update.message.chat.id, text=message, reply_markup=reply_markup)
+        bot.sendMessage(chat_id=chat_id, text=message, reply_markup=reply_markup)
     else:
         bot.sendMessage(chat_id=update.message.chat.id, text=format(filenames))
 
