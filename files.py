@@ -4,15 +4,18 @@ import logging
 import json
 import math
 import telegram
-from telegram.ext import Updater, Filters, CallbackQueryHandler, CommandHandler, MessageHandler, Job
+from telegram.ext import Updater, Filters, CallbackQueryHandler, CommandHandler, ConversationHandler, MessageHandler, Job
+from telegram.chataction import ChatAction
 from telegram.inlinekeyboardmarkup import InlineKeyboardMarkup
 from telegram.inlinekeyboardbutton import InlineKeyboardButton
 import os
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def upload_document(bot, update):
+PROCESS = range(1)
+
+def upload_file(bot, update, job_queue):
     logger.debug(update.message)
     chat_id = update.message.chat.id
     file_name = update.message.document.file_name
@@ -23,12 +26,12 @@ def upload_document(bot, update):
         bot.sendMessage(chat_id=chat_id, text=message)
     else:
         sizeMB = math.ceil(file_size/1024/1024)
-        queue.put(Job(upload_document_cb, 0, repeat=False, context=update.message))
+        job_queue.put(Job(upload_file_cb, 0, repeat=False, context=update.message))
         message = 'File Queued\nFile Name: {}\nFile Size: {}MB'.format(file_name, sizeMB)
         logger.debug(message)
         bot.sendMessage(chat_id=chat_id, text=message)
 
-def upload_document_cb(bot, job):
+def upload_file_cb(bot, job):
     logger.debug(job.context)
     chat_id = job.context.chat.id
     file_id = job.context.document.file_id
@@ -40,7 +43,7 @@ def upload_document_cb(bot, job):
     logger.debug('File saved to: ' + config.savePath + file_name)
     bot.sendMessage(chat_id=chat_id, text='File {} saved!'.format(file_name))
 
-def list_files(bot, update, user_data):
+def list_file(bot, update, user_data):
     logger.info(update)
     filenames = os.listdir(config.savePath)
     user_data['list'] = filenames
@@ -53,7 +56,7 @@ def list_files(bot, update, user_data):
     else:
         bot.sendMessage(chat_id=update.message.chat.id, text=format(filenames))
 
-def list_files_cbq(bot, update, user_data):
+def list_file_cbq(bot, update, user_data):
     logger.info(update)
     logger.info(user_data)
     if user_data:
@@ -74,35 +77,69 @@ def list_files_cbq(bot, update, user_data):
             message = format(filenames[start:start+config.pageLimit])
         bot.editMessageText(chat_id=chat_id, message_id=message_id, text=message, reply_markup=reply_markup)
 
+def download_file_start(bot, update):
+    bot.sendMessage(chat_id=update.message.chat_id, text='Send filename to download\nSay /done when finish')
+    return PROCESS
+
+def download_file_process(bot, update):
+    chat_id = update.message.chat_id
+    file_names = update.message.text.split('\n')
+    for file_name in file_names:
+        file_path = config.savePath + file_name
+        if os.path.isfile(file_path):
+            bot.sendChatAction(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+            bot.sendDocument(chat_id=chat_id, document=open(file_path, 'rb'))
+        else: 
+            bot.sendMessage(chat_id=chat_id, text='File {} does not exist!'.format(file_name))
+    return PROCESS
+
+def download_file_done(bot, update):
+    bot.sendMessage(chat_id=update.message.chat_id, text='OK')
+    return ConversationHandler.END
+
 def format(list):
     return '\n'.join(list) if len(list) > 0 else 'No files'
 
-def start(bot, update):
-    logger.debug('start')
-    bot.sendMessage(chat_id=update.message.chat_id, text="I'm a bot, please talk to me!")
+def help(bot, update):
+    message = '''Hello!
+        Send me documents and they will be saved
+        Say /list and I will show you what I have
+        Say /download and tell me file you wish to load
+        Say /done when you've got all you need
+    '''
+    bot.sendMessage(chat_id=update.message.chat_id, text=message)
 
-def unknown(bot, update):
-    bot.sendMessage(chat_id=update.message.chat_id, text="Sorry, I didn't understand that command.")
 
 def main():
     updater = Updater(token=config.token)
     dispatcher = updater.dispatcher
-    queue = updater.job_queue
 
-    start_handler = CommandHandler('start', start)
-    upload_doc_handler = MessageHandler(Filters.document, upload_document)
-    list_handler = CommandHandler('list', list_files, pass_user_data = True)
-    list_cbq_handler = CallbackQueryHandler(list_files_cbq, pass_user_data = True)
-    unknown_handler = MessageHandler(Filters.command, unknown)
+    start_handler = CommandHandler('start', help)
+    
+    upload_handler = MessageHandler(Filters.document, upload_file, pass_job_queue = True)
+    
+    list_handler = CommandHandler('list', list_file, pass_user_data = True)
+    list_cbq_handler = CallbackQueryHandler(list_file_cbq, pass_user_data = True)
+    
+    download_handler = ConversationHandler(
+        entry_points = [CommandHandler('download', download_file_start)],
+        states = {
+            PROCESS: [MessageHandler(Filters.text, download_file_process)]
+        },
+        fallbacks = [CommandHandler('done', download_file_done)]
+    )
+    
+    unknown_handler = MessageHandler(Filters.all, help)
 
     dispatcher.add_handler(start_handler)
-    dispatcher.add_handler(upload_doc_handler)
+    dispatcher.add_handler(upload_handler)
     dispatcher.add_handler(list_handler)
     dispatcher.add_handler(list_cbq_handler)
+    dispatcher.add_handler(download_handler)
     dispatcher.add_handler(unknown_handler)
 
+    logger.info('Start running.')
     updater.start_polling()
     updater.idle()
-    logger.info('Running.')
 
 main()
