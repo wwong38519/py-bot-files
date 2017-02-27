@@ -10,7 +10,6 @@ from telegram.inlinekeyboardmarkup import InlineKeyboardMarkup
 from telegram.inlinekeyboardbutton import InlineKeyboardButton
 import os
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 PROCESS = range(1)
@@ -18,22 +17,24 @@ PROCESS = range(1)
 def upload_file(bot, update, job_queue):
     logger.debug(update.message)
     chat_id = update.message.chat.id
+    message_id = update.message.message_id
     file_name = update.message.document.file_name
     file_size = update.message.document.file_size
     if file_size >= config.sizeLimit:
         message = 'File {} size too big, cannot be saved.'.format(file_name)
         logger.debug(message)
-        bot.sendMessage(chat_id=chat_id, text=message)
+        bot.sendMessage(chat_id=chat_id, reply_to_message_id=message_id, text=message)
     else:
-        sizeMB = math.ceil(file_size/1024/1024)
+        sizeMB = file_size/1024/1024
         job_queue.put(Job(upload_file_cb, 0, repeat=False, context=update.message))
-        message = 'File Queued\nFile Name: {}\nFile Size: {}MB'.format(file_name, sizeMB)
+        message = 'File Queued\nFile Name: {}\nFile Size: {0:.2f}MB'.format(file_name, sizeMB)
         logger.debug(message)
-        bot.sendMessage(chat_id=chat_id, text=message)
+        bot.sendMessage(chat_id=chat_id, reply_to_message_id=message_id, text=message)
 
 def upload_file_cb(bot, job):
     logger.debug(job.context)
     chat_id = job.context.chat.id
+    message_id = job.context.message_id
     file_id = job.context.document.file_id
     file_name = job.context.document.file_name
     file_size = job.context.document.file_size
@@ -41,7 +42,7 @@ def upload_file_cb(bot, job):
     file = bot.getFile(file_id)
     file.download(config.savePath + file_name)
     logger.debug('File saved to: ' + config.savePath + file_name)
-    bot.sendMessage(chat_id=chat_id, text='File {} saved!'.format(file_name))
+    bot.sendMessage(chat_id=chat_id, reply_to_message_id=message_id, text='File {} saved!'.format(file_name))
 
 def list_file(bot, update, user_data):
     logger.info(update)
