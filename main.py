@@ -9,7 +9,7 @@ def setupLog():
     import config
     logger = logging.getLogger()
     logFormatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fileHandler = logging.handlers.RotatingFileHandler(config.logFile)
+    fileHandler = logging.handlers.RotatingFileHandler(config.logFile, encoding='utf-8')
     fileHandler.setFormatter(logFormatter)
     fileHandler.setLevel(logging.DEBUG)
     consoleHandler = logging.StreamHandler()

@@ -27,7 +27,7 @@ def upload_file(bot, update, job_queue):
     else:
         sizeMB = file_size/1024/1024
         job_queue.put(Job(upload_file_cb, 0, repeat=False, context=update.message))
-        message = 'File Queued\nFile Name: {}\nFile Size: {0:.2f}MB'.format(file_name, sizeMB)
+        message = 'File Queued\nFile Name: {0}\nFile Size: {1:.2f}MB'.format(file_name, sizeMB)
         logger.debug(message)
         bot.sendMessage(chat_id=chat_id, reply_to_message_id=message_id, text=message)
 
@@ -38,7 +38,7 @@ def upload_file_cb(bot, job):
     file_id = job.context.document.file_id
     file_name = job.context.document.file_name
     file_size = job.context.document.file_size
-    logger.debug('upload_file, file_id: {} file_name: {} file_name: {}'.format(file_id, file_name, file_size))
+    logger.debug('upload_file, file_id: {} file_name: {} file_size: {}'.format(file_id, file_name, file_size))
     file = bot.getFile(file_id)
     file.download(config.savePath + file_name)
     logger.debug('File saved to: ' + config.savePath + file_name)
